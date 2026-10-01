@@ -307,12 +307,19 @@ class IntentClassifier:
 
     # -- persistence --------------------------------------------------
     def save(self, path: Path = MODEL_PATH) -> Path:
+        # The sidecar is derived from `path` rather than pinned to the module
+        # constant: saving a challenger to a temp directory must not overwrite
+        # the champion's metadata, and writing to a fresh directory must not
+        # fail on a missing parent.
+        path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path = path.with_name(path.stem + "_meta.json")
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("wb") as fh:
             pickle.dump({"pipeline": self.pipeline, "classes": self.classes,
                          "version": self.version, "abstain_threshold": self.abstain_threshold,
                          "temperature": self.temperature}, fh)
-        META_PATH.write_text(json.dumps({
+        meta_path.write_text(json.dumps({
             "version": self.version, "classes": self.classes,
             "abstain_threshold": self.abstain_threshold,
             "temperature": self.temperature,

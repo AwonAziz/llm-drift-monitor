@@ -530,7 +530,13 @@ async def metric_series(run_id: str | None = None, category: str = "embedding",
 
 @app.get("/monitoring/decisions", response_model=list[DecisionResponse], tags=["Monitoring"])
 async def decisions(run_id: str | None = None) -> list[DecisionResponse]:
-    resolved = _resolve_run(run_id)
+    # List endpoints degrade to an empty list when nothing has run yet. A 404
+    # here forces the dashboard to special-case "no runs" on every list, and
+    # an empty list is a truthful answer: there are no decisions.
+    try:
+        resolved = _resolve_run(run_id)
+    except HTTPException:
+        return []
     df = _get_store().decisions(resolved)
     out = []
     for _, d in df.iterrows():
@@ -547,7 +553,10 @@ async def decisions(run_id: str | None = None) -> list[DecisionResponse]:
 
 @app.get("/monitoring/incidents", response_model=list[IncidentResponse], tags=["Monitoring"])
 async def incidents(run_id: str | None = None, status: str | None = None) -> list[IncidentResponse]:
-    resolved = _resolve_run(run_id)
+    try:
+        resolved = _resolve_run(run_id)
+    except HTTPException:
+        return []
     df = _get_store().incidents(resolved, status)
     out = []
     for _, inc in df.iterrows():
