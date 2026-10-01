@@ -159,7 +159,7 @@ both responder and judge, `all-MiniLM-L6-v2` embeddings and 2,758 requests:
 | 12 | recovery | 0.61 | 0.40 | **0.946** | 0.060 | 0.400 | investigate |
 | 13 | recovery | 0.68 | 0.41 | **0.973** | 0.059 | 0.400 | investigate |
 
-Three things in that table are worth arguing about in an interview:
+Three things in that table are worth arguing about:
 
 1. **Window 3 is a 2× traffic spike with identical mix, and nothing fires.**
    Every detector is sample-size aware and the p-values are calibrated, so a
