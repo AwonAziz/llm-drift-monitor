@@ -116,7 +116,7 @@ windows_df = store.list_windows(run_id)
 decisions_df = store.decisions(run_id)
 incidents_df = store.incidents(run_id)
 metrics_df = store.metric_series(run_id)
-wide = pivot(run_id)
+wide = pivot(store, run_id)
 
 if windows_df.empty:
     st.warning("This run has no windows.")
@@ -133,7 +133,17 @@ if not metrics_df.empty:
 
 
 def vals(category: str, name: str) -> list:
-    return series(store, run_id, category, name)["value"].tolist()
+    """Values for one metric, or an empty list if the run never recorded it.
+
+    `store.metric_series` returns a column-less DataFrame when nothing matches,
+    so indexing it raises KeyError. A partially-populated run — a crashed
+    process, a detector disabled by config, a new metric added after the fact —
+    must render the tabs it can rather than take the whole dashboard down.
+    """
+    df = series(store, run_id, category, name)
+    if df.empty or "value" not in df.columns:
+        return []
+    return df["value"].tolist()
 
 
 def thr(category: str, name: str) -> tuple[float | None, float | None]:
@@ -150,14 +160,27 @@ def thr(category: str, name: str) -> tuple[float | None, float | None]:
         return None, None
 
 
+def chart(fig: go.Figure | None, key: str) -> None:
+    """
+    Render a Plotly figure under a stable, unique key.
+
+    Streamlit derives element IDs from the source line, so every
+    `st.plotly_chart` call inside a loop gets the *same* auto-generated ID and
+    the second one raises "multiple plotly_chart elements with the same
+    auto-generated ID". A key per call site fixes it and also lets Streamlit
+    preserve zoom state when you switch tabs.
+    """
+    if fig is not None:
+        st.plotly_chart(fig, use_container_width=True, key=key)
+
+
 def plot_metric(category: str, name: str, title: str, colour: str = BLUE,
                 height: int = 260, connect: bool = True) -> go.Figure | None:
     df = series(store, run_id, category, name)
     if df.empty:
         return None
     mod, sev = thr(category, name)
-    line = line_with_bands(widx, df["value"].tolist(), mod, sev, colour, name, connect)
-    fig = go.Figure([line])
+    fig = line_with_bands(widx, df["value"].tolist(), mod, sev, colour, name, connect)
     fig.update_layout(**plotly_layout(title, height))
     return regime_bands(fig, wlabels)
 
@@ -174,10 +197,14 @@ st.caption(f"Run `{run_id}` · {len(windows_df)} windows · "
 
 k1, k2, k3, k4, k5, k6 = st.columns(6)
 with k1:
-    st.metric("Health", f"{health:.0f}")
+    st.metric("Health", f"{health:.0f}",
+              delta="healthy" if health >= 85 else ("degraded" if health >= 60 else "critical"),
+              delta_color="normal" if health >= 85 else "inverse")
 with k2:
     action = str(last_decision.get("action", "?"))
-    st.markdown(kpi("Decision", action.upper(), "", ACTION_COLOR.get(action, MUTED)))
+    st.metric("Decision", action.upper(),
+              delta=str(last_decision.get("severity", "")),
+              delta_color="inverse" if action != "noop" else "normal")
 with k3:
     auc = vals("embedding", "domain_classifier_auc")
     last_auc = auc[-1] if auc else None
@@ -223,20 +250,20 @@ with tab_overview:
     with c1:
         fig = plot_metric("embedding", "domain_classifier_auc", "Domain classifier AUC", PURPLE)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_239")
     with c2:
         fig = plot_metric("quality", "accuracy", "Accuracy (labelled traffic)", GREEN)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_243")
     c3, c4 = st.columns(2)
     with c3:
         fig = plot_metric("judge", "judge_score", "LLM-as-judge weighted score", BLUE)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_248")
     with c4:
         fig = plot_metric("quality", "ece", "Expected calibration error", ORANGE)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_252")
 
     st.markdown("<div class='section'>Incidents</div>", unsafe_allow_html=True)
     if incidents_df.empty:
@@ -263,7 +290,7 @@ with tab_overview:
                                           for name in wlabels]))
     fig.update_layout(**plotly_layout("", 220, False))
     fig.update_yaxes(title_text="requests")
-    st.plotly_chart(regime_bands(fig, wlabels), use_container_width=True)
+    chart(regime_bands(fig, wlabels), "chart_279")
 
 # ══ Embedding drift ════════════════════════════════════════════════════
 with tab_emb:
@@ -292,7 +319,9 @@ with tab_emb:
                 if fig is None:
                     st.info(f"{title}: no data.")
                 else:
-                    st.plotly_chart(fig, use_container_width=True)
+                    # The key must include the metric name: this is inside a
+                    # loop, so a line-number key repeats on every iteration.
+                    chart(fig, f"chart_emb_{name}")
 
     st.markdown("<div class='section'>Detector votes per window</div>", unsafe_allow_html=True)
     if not metrics_df.empty:
@@ -343,7 +372,7 @@ with tab_emb:
                                        marker=dict(size=4, color=RED, opacity=0.5)))
             fig.update_layout(**plotly_layout(
                 f"Reference vs latest window ({len(rp)} / {len(cp)} vectors, 2D PCA)", 460))
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_359")
     except Exception as exc:  # noqa: BLE001
         st.warning(f"Projection unavailable: {exc}")
 
@@ -355,29 +384,29 @@ with tab_qual:
     with qa:
         fig = plot_metric("quality", "accuracy", "Accuracy", GREEN)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_371")
     with qb:
         fig = plot_metric("quality", "macro_f1", "Macro F1", BLUE)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_375")
     qc, qd = st.columns(2)
     with qc:
         fig = plot_metric("quality", "ece", "Expected calibration error", ORANGE)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_380")
     with qd:
         fig = plot_metric("quality", "brier", "Brier score", YELLOW)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_384")
     qe, qf = st.columns(2)
     with qe:
         fig = plot_metric("quality", "abstention_rate", "Abstention rate", MUTED)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_389")
     with qf:
         fig = plot_metric("quality", "label_coverage", "Label coverage", MUTED)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_393")
 
     st.markdown("<div class='section'>In-scope vs out-of-scope</div>", unsafe_allow_html=True)
     fig = go.Figure()
@@ -389,7 +418,7 @@ with tab_qual:
         fig.add_trace(go.Scatter(x=s["window_index"], y=s["value"], mode="lines+markers",
                                  name=label, line=dict(color=colour, width=2)))
     fig.update_layout(**plotly_layout("", 280))
-    st.plotly_chart(regime_bands(fig, wlabels), use_container_width=True)
+    chart(regime_bands(fig, wlabels), "chart_405")
 
     st.markdown("<div class='section'>Reliability (latest window)</div>", unsafe_allow_html=True)
     latest_wid = order.iloc[-1]["window_id"]
@@ -397,7 +426,7 @@ with tab_qual:
     if traffic.empty:
         st.info("No traffic stored for the latest window.")
     else:
-        from sklearn.metrics import calibration_curve
+        from sklearn.calibration import calibration_curve
 
         lab = traffic[traffic["gold_intent"].notna()]
         if lab.empty:
@@ -414,7 +443,7 @@ with tab_qual:
             fig.update_layout(**plotly_layout("", 320))
             fig.update_xaxes(title_text="predicted confidence")
             fig.update_yaxes(title_text="observed accuracy")
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_430")
 
     st.markdown("<div class='section'>Worst-performing intents</div>", unsafe_allow_html=True)
     if traffic.empty or traffic["gold_intent"].isna().all():
@@ -425,7 +454,10 @@ with tab_qual:
                .groupby("gold_intent")["ok"].agg(["mean", "count"])
                .sort_values("mean"))
         agg = agg.rename(columns={"mean": "accuracy", "count": "n"})
-        st.bar_chart(agg, height=280, color="#58a6ff")
+        # Colour one series at a time: `st.bar_chart` colours every column, so
+        # passing a single colour alongside two columns is an error.
+        st.bar_chart(agg["accuracy"], height=280, color=BLUE)
+        st.bar_chart(agg["n"], height=140, color=MUTED)
         st.dataframe(agg.reset_index().head(15), use_container_width=True, hide_index=True)
 
 # ══ LLM-as-judge ═══════════════════════════════════════════════════════
@@ -445,17 +477,17 @@ with tab_judge:
                           annotation_text=f"baseline {float(baseline):.3f}",
                           annotation_font=dict(size=10, color=GREEN))
         fig.update_layout(**plotly_layout("Weighted rubric score vs baseline", 300))
-        st.plotly_chart(regime_bands(fig, wlabels), use_container_width=True)
+        chart(regime_bands(fig, wlabels), "chart_461")
 
     c1, c2 = st.columns(2)
     with c1:
         fig = plot_metric("judge", "judge_correctness_rate", "Judge 'correct' rate", GREEN)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_467")
     with c2:
         fig = plot_metric("judge", "judge_veto_rate", "Veto rate (safety / groundedness)", RED)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            chart(fig, "chart_471")
 
     st.markdown("<div class='section'>Per-dimension movement</div>", unsafe_allow_html=True)
     dims = sorted(n for n in metrics_df[metrics_df["category"] == "judge"]["name"].unique()
@@ -487,7 +519,9 @@ with tab_judge:
                 continue
             fig = line_with_bands(s["window_index"], s["value"].tolist(), None, None, PURPLE, d)
             fig.update_layout(**plotly_layout(d, 200, False))
-            st.plotly_chart(regime_bands(fig, wlabels), use_container_width=True)
+            # Keyed by dimension: this loop renders one chart per rubric
+            # dimension, so a single static key would collide.
+            chart(regime_bands(fig, wlabels), f"chart_dim_{d}")
     else:
         st.info("No per-dimension data yet.")
 

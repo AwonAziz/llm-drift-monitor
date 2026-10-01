@@ -185,8 +185,11 @@ class MetricPoint:
 class TelemetryStore:
     """Thread-safe append-only telemetry store."""
 
-    def __init__(self, path: Path | str = settings.TELEMETRY_DB):
-        self.path = Path(path)
+    def __init__(self, path: Path | str | None = None):
+        # Resolved at call time, not as a default argument. A default is bound
+        # once at import, which makes the database path impossible to override
+        # after startup and impossible to redirect in a test.
+        self.path = Path(path if path is not None else settings.TELEMETRY_DB)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
         self._lock = threading.RLock()

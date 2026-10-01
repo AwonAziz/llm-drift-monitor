@@ -62,8 +62,14 @@ def plotly_layout(title: str = "", height: int = 300, showlegend: bool = True) -
 
 def line_with_bands(labels: Sequence[str], values: Sequence[float],
                      moderate: float | None = None, severe: float | None = None,
-                     color: str = BLUE, name: str = "", connect: bool = True) -> go.Scatter:
-    """A metric line with its alert thresholds drawn in, so the chart states the policy."""
+                     color: str = BLUE, name: str = "",
+                     connect: bool = True) -> go.Figure:
+    """A metric line with its alert thresholds drawn in, so the chart states the policy.
+
+    Returns a complete ``Figure``, not a trace: the threshold lines are shapes
+    and annotations on the figure, so callers pass the result straight to
+    ``st.plotly_chart`` rather than wrapping it in another Figure.
+    """
     fig = go.Figure()
     y = [None if v is None or (isinstance(v, float) and math.isnan(v)) else float(v) for v in values]
     if connect and any(v is not None for v in y):
