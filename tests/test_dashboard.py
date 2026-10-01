@@ -13,10 +13,8 @@ so a broken dashboard now fails CI instead of failing silently in a demo.
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
-import pandas as pd
 import pytest
 
 from config import settings

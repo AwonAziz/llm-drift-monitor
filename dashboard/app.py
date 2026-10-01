@@ -26,7 +26,6 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.theme import (  # noqa: E402
-    ACTION_COLOR,
     BLUE,
     BORDER,
     GREEN,
@@ -40,7 +39,6 @@ from dashboard.theme import (  # noqa: E402
     YELLOW,
     decode_json,
     fmt,
-    kpi,
     line_with_bands,
     load_store,
     pivot,
