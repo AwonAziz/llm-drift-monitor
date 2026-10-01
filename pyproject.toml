@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-drift-monitor"
+version = "1.0.0"
+description = "LLM drift and output-quality monitoring platform: embedding drift, calibration decay, and LLM-as-judge regression tracking."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Awon Aziz" }]
+
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "scipy>=1.11",
+    "scikit-learn>=1.4",
+    "mlflow>=2.12",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "streamlit>=1.31",
+    "plotly>=5.20",
+    "requests>=2.31",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "jinja2>=3.1",
+    "tenacity>=8.2",
+]
+
+[project.optional-dependencies]
+embeddings = ["sentence-transformers>=3.0", "torch>=2.2"]
+llm = ["openai>=1.30", "anthropic>=0.27"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "httpx>=0.27", "ruff>=0.4"]
+
+[tool.setuptools]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q --strict-markers"
+markers = [
+    "slow: tests that invoke a local LLM or download a model",
+    "integration: end-to-end pipeline tests",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+exclude = [".venv", "artifacts", "data", "mlruns"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+# B905 (explicit `strict=` on zip) is churn for no runtime benefit here: every
+# zip in this codebase pairs an index with a same-length lookup by construction,
+# and the lengths are asserted by the tests that would catch a mismatch.
+ignore = ["E501", "B008", "B905"]

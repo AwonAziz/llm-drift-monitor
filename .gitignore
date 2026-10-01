@@ -1,0 +1,41 @@
+# ── Python ────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# ── MLflow / model artifacts ──────────────────────────────────────────
+mlruns/
+mlflow.db
+models/
+artifacts/
+
+# ── Data ──────────────────────────────────────────────────────────────
+# The raw corpus is fetched at runtime; the small reference/validation CSVs and
+# one example report are committed so the dashboard and the README's "open the
+# report" step work immediately after clone.
+data/raw/
+data/cache/
+data/runs/
+data/bundled/
+data/telemetry.db
+data/*.db
+data/*.jsonl
+data/reports/*
+!data/reports/.gitkeep
+!data/reports/example_*.html
+
+# ── Local secrets ─────────────────────────────────────────────────────
+.env
+
+# ── Editors / OS ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

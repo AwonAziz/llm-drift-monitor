@@ -1,0 +1,68 @@
+name: llm-drift-monitor
+
+services:
+  # ── Monitoring API + inference ────────────────────────────────────────
+  api:
+    build: .
+    image: llm-drift-monitor:latest
+    container_name: ldm-api
+    command: >
+      uvicorn src.api.server:app
+      --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      # `auto` uses sentence-transformers when available, else the offline
+      # hashing encoder. Pin it to `hashing` for a deterministic container.
+      LDM_EMBEDDING_BACKEND: ${LDM_EMBEDDING_BACKEND:-hashing}
+      LDM_JUDGE_PROVIDER: ${LDM_JUDGE_PROVIDER:-mock}
+      LDM_JUDGE_MODEL: ${LDM_JUDGE_MODEL:-qwen3:8b}
+      LDM_LLM_PROVIDER: ${LDM_LLM_PROVIDER:-mock}
+      LDM_LLM_MODEL: ${LDM_LLM_MODEL:-qwen3:8b}
+      LDM_LOG_LEVEL: ${LDM_LOG_LEVEL:-INFO}
+      # Reaches a local Ollama on the host. Remove if you use a hosted judge.
+      OLLAMA_HOST: http://host.docker.internal:11434
+    volumes:
+      - telemetry:/app/data
+      - artifacts:/app/artifacts
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # ── Dashboard ─────────────────────────────────────────────────────────
+  dashboard:
+    build: .
+    image: llm-drift-monitor:latest
+    container_name: ldm-dashboard
+    command: >
+      streamlit run dashboard/app.py
+      --server.address 0.0.0.0 --server.port 8501
+      --server.headless true
+    ports:
+      - "8501:8501"
+    volumes:
+      # Shared with the API: the dashboard reads the same telemetry the monitor
+      # writes. It deliberately does not recompute anything.
+      - telemetry:/app/data
+      - artifacts:/app/artifacts
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # ── Optional: a real judge, no API key ────────────────────────────────
+  # Started with:  docker compose --profile judge up -d
+  # Uncomment `extra_hosts` on the services above if you need host access instead.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ldm-ollama
+    profiles: ["judge"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  telemetry:
+  artifacts:
+  ollama:
