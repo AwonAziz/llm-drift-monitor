@@ -27,6 +27,7 @@ data/bundled/
 data/telemetry.db
 data/*.db
 data/*.jsonl
+data/reference/*.csv
 data/reports/*
 !data/reports/.gitkeep
 !data/reports/example_*.html
