@@ -1,0 +1,37 @@
+name: deploy-site
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # docs/ is generated locally by scripts/build_site.py and committed.
+      # Regenerating it here would need the telemetry database, which is
+      # deliberately gitignored, so a published site that quietly rebuilds
+      # itself from nothing is worse than one that only changes when a human
+      # has run the demo and looked at the output.
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
