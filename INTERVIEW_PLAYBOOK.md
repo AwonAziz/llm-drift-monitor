@@ -197,6 +197,11 @@ Measured on this repo, not estimated:
 
 ## The three-minute demo
 
+> Live demo: https://awonaziz.github.io/llm-drift-monitor/
+> Open this first if there is no terminal available. It is a self-contained
+> report from the same run the numbers below come from.
+
+
 1. `make demo-fast` — run it live if you have a terminal. The table at the end
    prints itself.
 2. Open `data/reports/report_*.html` — self-contained, inline SVG, no server.

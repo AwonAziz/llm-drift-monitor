@@ -2,6 +2,13 @@
 
 **Drift monitoring and LLM-as-judge regression tracking for production LLM systems.**
 
+### ▶ **[Live demo](https://awonaziz.github.io/llm-drift-monitor/)**
+
+*A static, self-contained incident report from a real run — no server, no API key,
+nothing to install. Generated from telemetry by `scripts/build_site.py`.*
+
+---
+
 Most monitoring demos compare two histograms. This one watches a real LLM
 application — a banking support assistant — across a scripted production shift,
 and answers the question a platform team actually has to answer: *did the system
@@ -21,7 +28,7 @@ and 45% of production traffic falls outside the scope it was trained on.
                  ┌──────────────────────┴───────────────────────┐
                  ▼                                              ▼
         EMBEDDING DRIFT                                 OUTPUT QUALITY
-        MMD ��  sliced Wasserstein                        accuracy · macro-F1
+         MMD · sliced Wasserstein                        accuracy · macro-F1
         domain-classifier AUC                             ECE · Brier · abstention
         normalised Fréchet                                in-scope vs out-of-scope
         k-NN novelty rate                                 label-free proxies
@@ -123,41 +130,59 @@ pip install sentence-transformers          # semantic embeddings (optional)
 # Optional but recommended: a real LLM judge, no API key, nothing leaves your machine
 ollama pull qwen3:8b
 
-make bootstrap        # fetch data, train the champion, validate the judge
-make demo             # the full simulated production shift
-make report           # open data/reports/report_*.html
+python scripts/bootstrap.py      # fetch data, train the champion, validate the judge
+python scripts/demo_shift.py     # the full simulated production shift
 ```
 
 No model download, no GPU, no network? Everything still runs:
 
 ```bash
-make demo-fast        # 14 windows, offline encoder, deterministic mock judge (~50s)
+python scripts/demo_shift.py --fast     # 14 windows, offline encoder, mock judge (~95s)
 ```
+
+<details>
+<summary>Prefer <code>make</code>? (needs GNU make installed)</summary>
+
+| Instead of | Run |
+|---|---|
+| `make bootstrap` | `python scripts/bootstrap.py` |
+| `make demo` | `python scripts/demo_shift.py --reset` |
+| `make demo-fast` | `python scripts/demo_shift.py --fast --reset` |
+| `make api` | `python -m uvicorn src.api.server:app --port 8000` |
+| `make dashboard` | `python -m streamlit run dashboard/app.py` |
+| `make test` | `python -m pytest` |
+| `make report` | `python scripts/export_report.py` |
+| `make eval-judge` | `python scripts/eval_judge.py` |
+
+`make` is **not** installed by default on Windows, and the two common winget
+packages fail on a blocked mirror — so the script commands above are the primary
+path, and the Makefile is a convenience wrapper.
+
+</details>
 
 ---
 
 ## What the demo actually shows
 
-`python scripts/demo_shift.py` replays 14 evaluation windows of a live assistant
-and prints what the platform caught. Real output from a run with `qwen3:8b` as
-both responder and judge, `all-MiniLM-L6-v2` embeddings and 2,758 requests:
+The table below is the run behind the [live demo](https://awonaziz.github.io/llm-drift-monitor/) — 14 windows, 2,036 requests, 1,098 labelled, `qwen3:8b` as both responder and judge, `all-MiniLM-L6-v2` embeddings. Reproduce it with `python scripts/demo_shift.py`.
 
-| # | Regime | Domain AUC | OOD rate | Accuracy | ECE | Judge score | Decision |
-|---|--------|-----------:|---------:|---------:|----:|------------:|----------|
-| 0 | baseline | 0.58 | 0.06 | 0.907 | 0.059 | 0.580 | investigate (judge) |
-| 1 | baseline | 0.55 | 0.04 | 0.954 | 0.044 | 0.450 | investigate (judge) |
-| 2 | baseline | 0.51 | 0.02 | 0.960 | 0.048 | 0.385 | investigate (judge) |
-| 3 | volume_spike | 0.59 | 0.03 | 0.971 | 0.026 | 0.320 | investigate (judge) |
-| 4 | style_shift | **0.65** | 0.05 | 0.945 | 0.023 | 0.465 | investigate (input drift) |
-| 5 | style_shift | 0.65 | 0.04 | 0.926 | 0.048 | 0.385 | investigate (input drift) |
-| 6 | style_shift | 0.65 | 0.05 | 0.970 | 0.049 | 0.435 | investigate (input drift) |
-| 7 | new_intents | 0.65 | **0.40** | **0.583** | **0.213** | 0.385 | investigate · **SEVERE** |
-| 8 | new_intents | 0.69 | 0.43 | 0.524 | 0.238 | 0.400 | investigate · **SEVERE** |
-| 9 | new_intents | 0.68 | 0.40 | 0.545 | 0.270 | 0.370 | investigate · **SEVERE** |
-| 10 | mixed_crisis | **0.71** | **0.64** | **0.227** | **0.517** | 0.400 | investigate · **SEVERE** |
-| 11 | mixed_crisis | 0.74 | 0.64 | 0.236 | 0.457 | 0.385 | **→ retrain, promote v2** |
-| 12 | recovery | 0.61 | 0.40 | **0.946** | 0.060 | 0.400 | investigate |
-| 13 | recovery | 0.68 | 0.41 | **0.973** | 0.059 | 0.400 | investigate |
+| # | Regime | Domain AUC | OOD rate | Accuracy | ECE | Judge score | Health | Decision |
+|---|--------|-----------:|---------:|---------:|----:|------------:|-------:|----------|
+| 0 | baseline | 0.517 | 0.052 | 0.970 | 0.038 | 0.408 | 73.8 | investigate |
+| 1 | baseline | 0.526 | 0.030 | 0.987 | 0.044 | 0.433 | 73.8 | investigate |
+| 2 | baseline | 0.516 | 0.015 | 0.974 | 0.072 | 0.300 | 73.8 | investigate |
+| 3 | volume_spike | 0.574 | 0.044 | 0.935 | 0.040 | 0.433 | 82.5 | investigate |
+| 4 | style_shift | 0.553 | 0.067 | 0.977 | 0.050 | 0.408 | 73.8 | investigate |
+| 5 | style_shift | 0.541 | 0.074 | 0.892 | 0.059 | 0.542 | 73.8 | investigate |
+| 6 | style_shift | 0.566 | 0.037 | 0.942 | 0.079 | 0.408 | 73.8 | investigate |
+| 7 | new_intents | 0.627 | 0.361 | 0.507 | 0.279 | 0.325 | 42.2 | investigate |
+| 8 | new_intents | 0.621 | 0.421 | 0.590 | 0.201 | 0.542 | 42.2 | investigate |
+| 9 | new_intents | 0.587 | 0.368 | 0.620 | 0.214 | 0.275 | 42.2 | investigate |
+| 10 | mixed_crisis | 0.712 | 0.636 | 0.338 | 0.366 | 0.350 | 33.5 | investigate |
+| 11 | mixed_crisis | 0.687 | 0.636 | 0.304 | 0.457 | 0.325 | 33.5 | investigate |
+| 12 | recovery | 0.543 | 0.391 | 0.969 | 0.071 | 0.325 | 73.8 | investigate |
+| 13 | recovery | 0.566 | 0.368 | 0.941 | 0.047 | 0.350 | 73.8 | investigate |
+**A caveat on the judge column, stated rather than hidden.** The judge baseline here was established on `n=6` reference responses, giving a standard error of 0.108. Every window therefore reads as a 4-sigma regression — not because the replies are terrible, but because the *reference itself* is noisy. The z-gate is behaving correctly: it is refusing to trust an under-powered baseline. The fix is a bigger baseline (a few hundred judged reference responses, once), not a wider threshold. The 8-case golden suite is unaffected and passes 8/8, so the judge logic itself is sound. Window 0 is the honest tell: it carries the lowest confidence in the run (`conf=0.40`) while everything else reads `conf=0.97`. A monitoring system that reports low confidence in its own verdict is worth more than one that always sounds certain.
 
 Three things in that table are worth arguing about:
 
@@ -324,21 +349,33 @@ tests/                    184 tests, all offline, ~90s
 
 ## Commands
 
+`make` is not installed by default on Windows and the common winget packages
+fail on a blocked mirror, so the scripts are the primary interface. The Makefile
+targets wrap these one-to-one.
+
 | Command | What it does |
 |---|---|
-| `make setup` | venv + dependencies |
-| `make bootstrap` | fetch data, train champion, freeze reference, validate judge |
-| `make demo` | the full 14-window production shift with a real LLM |
-| `make demo-fast` | same structure, offline encoder + mock judge, ~50s |
-| `make api` | FastAPI on :8000 (docs at /docs) |
-| `make dashboard` | Streamlit on :8501 |
-| `make test` | full test suite |
-| `make lint` | ruff |
-| `make report` | regenerate reports from the last run |
-| `make eval-judge` | run the golden judge suite against a candidate model |
-| `make clean` | drop telemetry, artifacts and caches |
+| `python scripts/bootstrap.py` | fetch data, train champion, freeze reference, validate judge |
+| `python scripts/demo_shift.py` | the full 14-window production shift with a real LLM |
+| `python scripts/demo_shift.py --fast` | same structure, offline encoder + mock judge, ~95s |
+| `python scripts/demo_shift.py --no-promote` | show that the incident does not self-heal |
+| `python -m uvicorn src.api.server:app --port 8000` | inference + monitoring API, docs at `/docs` |
+| `python -m streamlit run dashboard/app.py` | dashboard on :8501 |
+| `python -m pytest` | full test suite (193 tests, ~95s) |
+| `python scripts/export_report.py --open` | regenerate reports from the last run |
+| `python scripts/eval_judge.py` | run the golden judge suite against a candidate model |
+| `python scripts/build_site.py` | rebuild the public demo site into `docs/` |
 
-Everything is also a plain script — the Makefile only wraps them.
+Useful flags on `demo_shift.py`:
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--judge-sample` | 24 | samples judged per window |
+| `--response-sample` | 40 | LLM replies generated per window |
+| `--window-size` | 250 | requests per window |
+| `--max-workers` | 4 | judge concurrency |
+| `--regime <name>` | all | run a single regime |
+| `--reset` | off | clear the telemetry store first |
 
 ---
 
