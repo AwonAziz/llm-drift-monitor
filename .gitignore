@@ -26,6 +26,10 @@ data/runs/
 data/bundled/
 data/telemetry.db
 data/*.db
+# SQLite WAL sidecars: written next to the database while it is open, so
+# anyone who has run the demo will otherwise see them appear as untracked files.
+data/*.db-shm
+data/*.db-wal
 data/*.jsonl
 data/reference/*.csv
 data/reports/*
